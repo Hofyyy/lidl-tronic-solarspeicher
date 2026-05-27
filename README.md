@@ -54,7 +54,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 | **107** | 80 | Entladetiefe (DoD) | % | ×1 | Device Log = 80%, App bestätigt ✓ |
 | **109** | standby | Ladestatus | Enum | — | Charge + Standby im Log beobachtet ✓ |
 | **111** | True | Daten-Refresh Befehl (mbeb: evtl. WR aktiv/inaktiv) | Bool | — | App Client sendet on → Device antwortet ✓ |
-| **115** | 600 | WR-Ausgangsleistung | W | ×1 | App + Device Log übereinstimmend ✓ |
+| **115** | 600 | WR-Leistungslimit (Sollwert, max 600W; ≠ Momentan-Ausgang) | W | ×1 | Log konstant 600 bei Live-Ausgang 320W → Limit, nicht Istwert ✓ |
 
 ---
 
@@ -78,7 +78,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 ### Base64 DPs – bestätigt ✅
 
-#### `dc_message` – DC Ausgang (AUS1 + AUS2) ⚠️
+#### `dc_message` – DC Ausgang (AUS1 + AUS2) ✅
 
 **Format:** 13 Bytes
 
@@ -115,15 +115,12 @@ byte[11:13]    = DC2 Leistung (W)   → AUS2
 > - Abend 19:28–20:28: PV nimmt ab, Ausgang sinkt von 178W auf 0W (Akku leer / Pause)
 > - 20:48–20:52: Flag springt auf **3**, Zeitfenster-Slot 1 aktiv (20:30–23:59, 320W)
 > - Bei Charge (15:53): Ausgänge 0W, PV-Energie fließt direkt in Batterie
-> - V×A ≈ W bei allen Samples → Dekodierung **100% bestätigt** ✅
+> - V×A ≈ W bei **flag 0** (gemessene Leistung) → Dekodierung bestätigt ✅
+> - Bei **flag 3** (Zeitfenster) meldet das Leistungs-Byte den **kommandierten Slot-Sollwert** (320W ÷ 2 = 160W je Kanal), nicht die gemessene V×A (~150W) — bestätigt 27.05.2026
 
 ---
 
----
-
-### Base64 DPs – plausibel, noch nicht 100% bestätigt ⚠️
-
-#### `pv_canshu` (PV参数) – Solar PV Eingang
+#### `pv_canshu` (PV参数) – Solar PV Eingang ✅
 
 **Format:** 13 Bytes
 
@@ -138,9 +135,10 @@ byte[11:13]    = PV2 Leistung (W)
 ```
 
 **Verifikation:**
-`AAEWAEgAyQESAtwAyQ==` → PV1: 27.8V / 7.2A / **201W** ✅ | PV2: 27.4V / 7.32A / **201W** ✅
+- `AAEWAEgAyQESAtwAyQ==` → PV1: 27.8V / 7.2A / **201W** ✅ | PV2: 27.4V / 7.32A / **201W** ✅
+- Messreihe 27.05.2026 (Sonnenuntergang, flag 3): PV gesamt 62 → 11 → 8 → 4 W, V×A bei allen Samples konsistent ✅
 
-> ⚠️ Skalierungsunterschied: PV1 Strom ÷10, PV2 Strom ÷100.
+> Hinweis: Skalierungsunterschied PV1 Strom ÷10, PV2 Strom ÷100. byte[0] im Entladebetrieb = 3.
 
 ---
 
@@ -151,14 +149,19 @@ byte[11:13]    = PV2 Leistung (W)
 ```
 byte[0:2] ÷10 = Batteriespannung (V)
 byte[2:4] ÷10 = Batteriestrom (A)
-byte[4:6] ÷10 = Batterieleistung (W)
+byte[4:6]     = Batterieleistung (W)   ← ×1 (KEIN Teiler!)
 ```
 
 **Verifikation:**
-- `AdwALwDj` → 47.6V / 4.7A / 22.7W ✅ (Ladebetrieb)
-- `Ad4AAgAA` → 47.8V / 0.2A / 0.0W ✅ (Standby, Akku voll)
+- `AdwALwDj` → 47.6V / 4.7A / **227W** ✅ (Ladebetrieb; 47.6×4.7 = 224 ≈ 227)
+- `Ad4AAgAA` → 47.8V / 0.2A / 0W ✅ (Standby, Akku voll)
+- `Ac4ARgFF` → 46.2V / 7.0A / **325W** ✅ (Entladung 27.05.2026; 46.2×7.0 = 323 ≈ 325)
+
+> ⚠️ Korrektur 27.05.2026: Leistung ist `byte[4:6]` **×1**, nicht ÷10 (frühere Annahme war falsch — V×A-Gegenprobe **und** Live-Entladung bei 325W bestätigen ×1).
 
 ---
+
+### Base64 DPs – plausibel, noch nicht 100% bestätigt ⚠️
 
 #### `放电模式` – Entlademodus Zeitfenster
 
@@ -186,6 +189,8 @@ Pro Slot (7 Bytes, Offset = 1 + slot_index * 7):
 | 4 | 22 | ❌ | 00:00 | 23:59 | 80W |
 | 5 | 29 | ❌ | 00:00 | 23:59 | 80W |
 
+> Slot 1 (20:30–23:59, 320W) indirekt bestätigt: am 27.05.2026 20:49–21:09 `dc_message` flag 3 + 320W WR-Ausgang während dieses Fensters.
+
 ---
 
 ### Base64 DPs – ungeklärt ❓
@@ -205,7 +210,7 @@ Dekodierte uint16-BE-Werte: **1004, 360, 30, 600**. Hypothese: WR-Limits (30W mi
 | 105 | `充电模式` | Enum | Lademodus | `charge_first` / `charge_discharge` |
 | 107 | `放电深度` | Integer | Entladetiefe (DoD) | 1–100 % |
 | 111 | `主动更新数据` | Boolean | Daten-Refresh auslösen (mbeb: ggf. WR an/aus) | `true` |
-| 115 | `微逆功率` | Integer | WR-Ausgangsleistung | W (0–600W) |
+| 115 | `微逆功率` | Integer | WR-Leistungslimit (Sollwert) | W (0–600W) |
 | — | `放电模式` | Base64 | Entladezeitfenster (5 Slots) | siehe Struktur oben |
 
 ---
@@ -239,7 +244,7 @@ def decode_battery_parameters(b64: str) -> dict:
     return {
         "voltage_v": struct.unpack(">H", raw[0:2])[0] / 10,
         "current_a": struct.unpack(">H", raw[2:4])[0] / 10,
-        "power_w":   struct.unpack(">H", raw[4:6])[0] / 10,
+        "power_w":   struct.unpack(">H", raw[4:6])[0],   # ×1, nicht ÷10
     }
 
 
@@ -482,7 +487,7 @@ class Solarspeicher(hass.Hass):
         raw = _d(new)
         v = struct.unpack(">H", raw[0:2])[0] / 10
         a = struct.unpack(">H", raw[2:4])[0] / 10
-        w = struct.unpack(">H", raw[4:6])[0] / 10
+        w = struct.unpack(">H", raw[4:6])[0]   # ×1, nicht ÷10
         self.set_state("sensor.solarspeicher_batterie_spannung",
                        state=v, attributes={"unit_of_measurement": "V"})
         self.set_state("sensor.solarspeicher_batterie_strom",
