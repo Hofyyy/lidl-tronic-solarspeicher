@@ -78,7 +78,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 ### Base64 DPs – bestätigt ✅
 
-> ⚠️ Hinweis: Die Base64-DPs erscheinen **nicht** im normalen Status-Abruf (weder lokal via `tinytuya status()` noch im Cloud-Standard-Status) — sie werden nur als Log-Events gemeldet. Für localtuya/tuya-local müssen ihre DP-IDs ggf. via `detect_available_dps()` ermittelt und explizit angefragt werden.
+> ⚠️ Hinweis: Die Base64-DPs sind lokal **„push-only"** — sie erscheinen **nicht** in `tinytuya status()`, **nicht** über `detect_available_dps()` und **nicht** im Cloud-Standard-Status. Das Gerät pusht sie nur asynchron (~alle 10 min) bzw. an die Cloud (Device-Logs). localtuya/tuya-local fangen sie über ihre **persistente Verbindung** ab; ein Einzel-Abruf reicht nicht.
 
 #### `dc_message` – DC Ausgang (AUS1 + AUS2) ✅
 
@@ -538,7 +538,7 @@ return msg;
 - [x] **DP 37** – via lokalem DP-Dump als **Solarerzeugung gesamt** identifiziert (1369 = 13.69 kWh) ✓
 - [x] **DP 113** – mbeb-Hypothese „WR-Ausgangsleistung" widerlegt (0 trotz aktiver Entladung); bleibt unklar
 - [ ] **DP 111** – mbeb-Hypothese „WR aktiv/inaktiv" gegen beobachtetes Refresh-Verhalten abgrenzen
-- [ ] **Base64-DP-Nummern** via `tinytuya detect_available_dps()` ermitteln (fehlen im normalen Status)
+- [ ] **Base64-DP-IDs** über persistente Verbindung mitschneiden (push-only; `detect_available_dps()` findet sie nicht)
 - [ ] `dc_message` byte[2] bei Charge-Status klären
 
 ### Optional / Erweitert
