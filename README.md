@@ -53,7 +53,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 | **105** | charge_first | Lademodus | Enum | — | Toggle in App → Log zeigte charge_discharge ✓ |
 | **107** | 80 | Entladetiefe (DoD) | % | ×1 | Device Log = 80%, App bestätigt ✓ |
 | **109** | standby | Ladestatus | Enum | — | Charge + Standby im Log beobachtet ✓ |
-| **111** | True | Daten-Refresh Befehl | Bool | — | App Client sendet on → Device antwortet ✓ |
+| **111** | True | Daten-Refresh Befehl (mbeb: evtl. WR aktiv/inaktiv) | Bool | — | App Client sendet on → Device antwortet ✓ |
 | **115** | 600 | WR-Ausgangsleistung | W | ×1 | App + Device Log übereinstimmend ✓ |
 
 ---
@@ -71,8 +71,8 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 | DP ID | Wert | Hypothese | Was zu tun |
 |---|---|---|---|
-| **37** | 907 | Tages-PV-Ertrag (9.07 kWh)? | Morgen früh prüfen ob Wert auf 0 zurückgesetzt wird + zeitgleichen App-Wert vergleichen |
-| **113** | 0 | Unbekannt – immer 0 | Wahrscheinlich intern, niedrige Priorität |
+| **37** | 907 | Tages-PV-Ertrag (9.07 kWh)? **oder** Batterie-Lade-/Entladeleistung (W) – mbeb (Akkudoktor-Forum) deutet DP 37 als Batterieleistung | Live prüfen: zeitgleich mit App-Batterieleistung **und** PV-Tagesertrag vergleichen; Tagesreset → PV-Ertrag |
+| **113** | 0 | **Aktuelle WR-Ausgangsleistung (W)** – mbeb (Akkudoktor-Forum): 0 wenn WR nicht einspeist; deckt sich mit Messung bei Charge/WR aus | Bei aktiver WR-Einspeisung (Zeitfenster-Slot) prüfen ob Wert >0 wird |
 
 ---
 
@@ -204,7 +204,7 @@ Dekodierte uint16-BE-Werte: **1004, 360, 30, 600**. Hypothese: WR-Limits (30W mi
 |---|---|---|---|---|
 | 105 | `充电模式` | Enum | Lademodus | `charge_first` / `charge_discharge` |
 | 107 | `放电深度` | Integer | Entladetiefe (DoD) | 1–100 % |
-| 111 | `主动更新数据` | Boolean | Daten-Refresh auslösen | `true` |
+| 111 | `主动更新数据` | Boolean | Daten-Refresh auslösen (mbeb: ggf. WR an/aus) | `true` |
 | 115 | `微逆功率` | Integer | WR-Ausgangsleistung | W (0–600W) |
 | — | `放电模式` | Base64 | Entladezeitfenster (5 Slots) | siehe Struktur oben |
 
@@ -214,9 +214,9 @@ Dekodierte uint16-BE-Werte: **1004, 360, 30, 600**. Hypothese: WR-Limits (30W mi
 
 | DP ID | Wert | Bemerkung |
 |---|---|---|
-| 37 | 907 | Evtl. heutiger PV-Ertrag (9.07 kWh?) – noch zu verifizieren |
+| 37 | 907 | Evtl. heutiger PV-Ertrag (9.07 kWh?) **oder** Batterie-Lade-/Entladeleistung (mbeb) – noch zu verifizieren |
 | 108 | 80 | `电池启动阈值` – Mindestausgangsleistung in W, unter diesem Wert schaltet WR ab |
-| 113 | 0 | Unbekannt |
+| 113 | 0 | Vermutlich aktuelle WR-Ausgangsleistung (mbeb) – 0 bei nicht einspeisendem WR |
 | dc_message byte[2] | 1–2 bei Charge | Bedeutung bei Ladestatus unklar |
 
 ---
@@ -529,8 +529,9 @@ return msg;
 - [ ] `放电模式` → Zeitfenster lesen und schreiben
 
 ### Ungeklärtes verifizieren
-- [ ] **DP 37** – morgen früh prüfen ob Wert auf 0 zurückgesetzt wird (Tagesreset = Tages-PV-Ertrag bestätigt) + zeitgleichen App-Wert vergleichen
-- [ ] DP 113: Bedeutung klären
+- [ ] **DP 37** – Tagesreset prüfen (→ Tages-PV-Ertrag) **vs.** zeitgleicher Vergleich mit App-Batterieleistung (mbeb-Hypothese: Batterie-Lade-/Entladeleistung)
+- [ ] **DP 113** – mbeb-Hypothese „aktuelle WR-Ausgangsleistung" prüfen: bei aktiver WR-Einspeisung (Zeitfenster-Slot) sollte Wert >0 werden
+- [ ] **DP 111** – mbeb-Hypothese „WR aktiv/inaktiv" gegen beobachtetes Refresh-Verhalten abgrenzen
 - [ ] `dc_message` byte[2] bei Charge-Status klären
 
 ### Optional / Erweitert
