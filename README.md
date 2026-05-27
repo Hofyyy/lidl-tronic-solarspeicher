@@ -4,13 +4,14 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 > ⚠️ Community-Reverse-Engineering. Nicht von Lidl, Marstek oder Tuya autorisiert. Keine Garantie auf Korrektheit. Nutzung auf eigenes Risiko — Schreib-DPs können das Gerät unerwartet beeinflussen.
 
-**Status:** Numerische DPs überwiegend verifiziert (DP 37 als Solarerzeugung via lokalem tinytuya-Dump bestätigt), Base64-Dekodierung der wichtigsten DPs durch Messreihen bestätigt. Noch offen: DP 113 (immer 0, unklar) und `逆変器類型`. Korrekturen und Beiträge via Issue oder PR willkommen.
+**Status:** Numerische DPs überwiegend verifiziert (DP 37 als Solarerzeugung via lokalem tinytuya-Dump bestätigt), Base64-Dekodierung der wichtigsten DPs durch Messreihen bestätigt. Noch offen: DP 113 (immer 0, unklar) und die numerische ID von `pv_canshu`. Korrekturen und Beiträge via Issue oder PR willkommen.
 
 ---
 
 ## Kontext
 
 - **Gerät:** Lidl TRONIC Solarspeicher 2.2 kWh (Marstek-Klon)
+- **Mikrowechselrichter:** Hoymiles HM-600 (auf 600 W limitiert; DP 115 = Leistungslimit)
 - **App:** Tuya (nicht Lidl Home)
 - **Device ID:** `<DEVICE_ID>` (eigene ID einsetzen)
 - **Product Category:** `bxsdy` (solarpowerstorage)
@@ -80,7 +81,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 > ⚠️ Hinweis: Die Base64-DPs sind lokal **„push-only"** — sie erscheinen **nicht** in `tinytuya status()`, **nicht** über `detect_available_dps()` und **nicht** im Cloud-Standard-Status. Das Gerät pusht sie nur asynchron (~alle 10 min) bzw. an die Cloud (Device-Logs). localtuya/tuya-local fangen sie über ihre **persistente Verbindung** ab; ein Einzel-Abruf reicht nicht.
 >
-> Per Listen-Modus (`scripts/dump_dps.py`) identifiziert: **DP 3 = `battery_parameters`**, **DP 33 = `dc_message`** (Push ~alle 10 min), **DP 106 = `放电模式`** (Push bei Schedule-Änderung). Offen: `pv_canshu` (vermutlich nur tagsüber) und `逆変器類型` (nur bei WR-Setting-Änderung).
+> Per Listen-Modus (`scripts/dump_dps.py`) identifiziert: **DP 3 = `battery_parameters`**, **DP 33 = `dc_message`** (Push ~alle 10 min), **DP 106 = `放电模式`** (Push bei Schedule-Änderung), **DP 114 = `逆変器類型`** (Push bei WR-Typ-Änderung). Offen nur noch: `pv_canshu` (vermutlich nur tagsüber).
 
 #### `dc_message` (DP 33) – DC Ausgang (AUS1 + AUS2) ✅
 
@@ -197,13 +198,21 @@ Pro Slot (7 Bytes, Offset = 1 + slot_index * 7):
 
 ---
 
-### Base64 DPs – ungeklärt ❓
+#### `逆変器類型` (DP 114) – WR-Typ-Konfiguration ✅
 
-#### `逆変器類型` – WR-Konfiguration
+**Format:** 8 Bytes = 4× uint16 Big-Endian
 
-**Format:** 8 Bytes – **Struktur und Bedeutung unklar**
+```
+byte[0:2] = WR-Typ-/Modell-Code (HM-600 = 1004, HM-800 = 1006)
+byte[2:4] = 360  (unverändert beim Modellwechsel – Bedeutung offen)
+byte[4:6] = Mindestleistung (W)?  (30)
+byte[6:8] = Maximalleistung (W) = Modell-Limit (HM-600 = 600, HM-800 = 800)
+```
 
-Dekodierte uint16-BE-Werte: **1004, 360, 30, 600**. Hypothese: WR-Limits (30W min, 360W default?, 600W max) – nicht bestätigt. Wahrscheinlich read-only, niedrige Priorität.
+**Verifikation (27.05.2026):** WR-Typ in der App von **HM-600 → HM-800** umgestellt →
+`1004, 360, 30, 600` wurde zu `1006, 360, 30, 800`. Typ-Code (1004→1006) **und**
+Max-Leistung (600→800) änderten sich entsprechend → DP-ID und Kern-Struktur bestätigt.
+byte[2:4]=360 blieb gleich (Bedeutung noch offen).
 
 ---
 
@@ -540,8 +549,8 @@ return msg;
 - [x] **DP 37** – via lokalem DP-Dump als **Solarerzeugung gesamt** identifiziert (1369 = 13.69 kWh) ✓
 - [x] **DP 113** – mbeb-Hypothese „WR-Ausgangsleistung" widerlegt (0 trotz aktiver Entladung); bleibt unklar
 - [ ] **DP 111** – mbeb-Hypothese „WR aktiv/inaktiv" gegen beobachtetes Refresh-Verhalten abgrenzen
-- [x] **Base64-DP-IDs** via Listen-Modus: DP 3 = `battery_parameters`, DP 33 = `dc_message`, DP 106 = `放电模式` ✓
-- [ ] **Restliche Base64-DP-IDs** (`pv_canshu` tagsüber, `逆変器類型` bei WR-Setting-Änderung) mitschneiden
+- [x] **Base64-DP-IDs** via Listen-Modus: DP 3 = `battery_parameters`, DP 33 = `dc_message`, DP 106 = `放电模式`, DP 114 = `逆変器類型` ✓
+- [ ] **`pv_canshu`-DP-ID** tagsüber (bei aktiver PV) mitschneiden — letzte offene Base64-ID
 - [ ] `dc_message` byte[2] bei Charge-Status klären
 
 ### Optional / Erweitert
