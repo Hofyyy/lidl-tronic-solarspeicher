@@ -79,7 +79,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 ### Base64 DPs – bestätigt ✅
 
-> ⚠️ Hinweis: Die Base64-DPs sind lokal **„push-only"** — sie erscheinen **nicht** in `tinytuya status()`, **nicht** über `detect_available_dps()` und **nicht** im Cloud-Standard-Status. Das Gerät pusht sie nur asynchron (~alle 10 min) bzw. an die Cloud (Device-Logs). localtuya/tuya-local fangen sie über ihre **persistente Verbindung** ab; ein Einzel-Abruf reicht nicht.
+> ⚠️ Hinweis: Die Base64-DPs sind lokal **„push-only"** — sie erscheinen **nicht** in `tinytuya status()`, **nicht** über `detect_available_dps()` und **nicht** im Cloud-Standard-Status. Das Gerät pusht sie nur asynchron (~alle 10 min) bzw. an die Cloud (Device-Logs). **Bestätigt (27.05.2026):** tuya-local empfängt sie über seine **persistente Verbindung** — ein Einzel-Abruf reicht nicht.
 >
 > Per Listen-Modus (`scripts/dump_dps.py`) identifiziert: **DP 3 = `battery_parameters`**, **DP 33 = `dc_message`** (Push ~alle 10 min), **DP 106 = `放电模式`** (Push bei Schedule-Änderung), **DP 114 = `逆変器類型`** (Push bei WR-Typ-Änderung). Offen nur noch: `pv_canshu` (vermutlich nur tagsüber).
 
@@ -342,10 +342,12 @@ def encode_discharge_schedule(slots: list, header: int = 0) -> str:
 2. Host: feste IP des Speichers (im Router DHCP-Reservation einrichten!)
 3. Device ID: `<DEVICE_ID>`
 4. Local Key: (aus API Explorer abrufen)
-5. Protocol: `3.3` oder `3.4`
+5. Protocol: `3.3` (lokal bestätigt)
 
 ### Custom Device YAML
 Pfad: `/config/custom_components/tuya_local/devices/solarspeicher_bxsdy.yaml`
+
+> Die Base64-DPs (3, 33, 106, 114) sind als **rohe String-Sensoren** (`category: diagnostic`) eingebunden — sie sind **push-only** und zeigen erst Werte, wenn das Gerät sie pusht (~alle 10 min bzw. bei Änderung). Dekodierung in HA via Template/AppDaemon (siehe nächster Abschnitt). `pv_canshu` fehlt noch, da DP-ID unbekannt (tagsüber ermitteln).
 
 ```yaml
 name: Solarspeicher bxsdy
@@ -394,7 +396,14 @@ secondary_entities:
           - scale: 0.01
       - id: 104
         type: integer
-        name: total_output_energy
+        name: total_output_energy        # "Electric Total" (Ausgang/Verbrauch)
+        unit: "kWh"
+        class: energy
+        mapping:
+          - scale: 0.01
+      - id: 37
+        type: integer
+        name: total_solar_energy         # "Reverse Energy Total" (Solarerzeugung)
         unit: "kWh"
         class: energy
         mapping:
@@ -413,7 +422,7 @@ secondary_entities:
             value: "Laden und Entladen"
 
   - entity: number
-    name: WR Ausgangsleistung
+    name: WR Leistungslimit
     dps:
       - id: 115
         type: integer
@@ -440,6 +449,48 @@ secondary_entities:
       - id: 111
         type: boolean
         name: button
+
+  - entity: number
+    name: WR Abschaltgrenze
+    dps:
+      - id: 108
+        type: integer
+        name: value
+        unit: "W"
+        range:
+          min: 0
+          max: 600
+
+  # --- Base64-DPs (push-only): rohe Strings, Dekodierung via Template/AppDaemon ---
+  # pv_canshu (PV参数) fehlt noch -- DP-ID tagsueber via Listen-Modus ermitteln
+  - entity: sensor
+    name: Batterie-Parameter (raw)
+    category: diagnostic
+    dps:
+      - id: 3
+        type: string
+        name: sensor
+  - entity: sensor
+    name: DC-Ausgang (raw)
+    category: diagnostic
+    dps:
+      - id: 33
+        type: string
+        name: sensor
+  - entity: sensor
+    name: Entlade-Zeitfenster (raw)
+    category: diagnostic
+    dps:
+      - id: 106
+        type: string
+        name: sensor
+  - entity: sensor
+    name: WR-Typ (raw)
+    category: diagnostic
+    dps:
+      - id: 114
+        type: string
+        name: sensor
 ```
 
 ---
