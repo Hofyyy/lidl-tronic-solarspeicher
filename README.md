@@ -203,16 +203,23 @@ Pro Slot (7 Bytes, Offset = 1 + slot_index * 7):
 **Format:** 8 Bytes = 4× uint16 Big-Endian
 
 ```
-byte[0:2] = WR-Typ-/Modell-Code (HM-600 = 1004, HM-800 = 1006)
-byte[2:4] = 360  (unverändert beim Modellwechsel – Bedeutung offen)
-byte[4:6] = Mindestleistung (W)?  (30)
-byte[6:8] = Maximalleistung (W) = Modell-Limit (HM-600 = 600, HM-800 = 800)
+byte[0:2] = WR-Typ-/Modell-Code (modellspezifisch – siehe Tabelle)
+byte[2:4] = 360  (bei allen Modellen gleich – Bedeutung offen)
+byte[4:6] = Mindestleistung (W)?  (30, konstant)
+byte[6:8] = Maximalleistung (W) = Modell-Limit (= W-Zahl im Modellnamen)
 ```
 
-**Verifikation (27.05.2026):** WR-Typ in der App von **HM-600 → HM-800** umgestellt →
-`1004, 360, 30, 600` wurde zu `1006, 360, 30, 800`. Typ-Code (1004→1006) **und**
-Max-Leistung (600→800) änderten sich entsprechend → DP-ID und Kern-Struktur bestätigt.
-byte[2:4]=360 blieb gleich (Bedeutung noch offen).
+**Verifikation (27.05.2026):** WR-Typ in der App durchgeschaltet:
+
+| Modell | byte[0:2] | byte[2:4] | byte[4:6] | byte[6:8] (Max-W) |
+|---|---|---|---|---|
+| HM-600 | 1004 | 360 | 30 | 600 |
+| HM-800 | 1006 | 360 | 30 | 800 |
+| HM-2250 | 1019 | 360 | 30 | 2250 |
+| HMT-2250-6T | 1028 | 360 | 30 | 2250 |
+| Deye SUN600G3-EU-230 | 2001 | 360 | 30 | 600 |
+
+`byte[6:8]` = Max-Leistung über **5 Modelle** bestätigt; `byte[0:2]` = Hersteller-/Modell-Code (Hoymiles im 1000er-Bereich, Deye im 2000er-Bereich; gleiche Leistung ≠ gleicher Code). `byte[2:4]=360` und `byte[4:6]=30` bleiben konstant (Bedeutung offen).
 
 ---
 
