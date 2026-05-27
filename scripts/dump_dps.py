@@ -4,7 +4,8 @@
 Gibt die numerischen DP-IDs + aktuelle Werte aus, spuert via
 detect_available_dps() zusaetzliche DPs auf (die Base64-DPs fehlen im
 Standard-Status) und dekodiert die bekannten Base64-DPs (automatische
-Klassifizierung nach Byte-Länge).
+Klassifizierung nach Byte-Länge). Alle Ausgaben werden zusaetzlich nach
+logs/<YYYY-MM-DD>.log geschrieben (mit Zeitstempel + Push-Intervall je DP).
 
 Voraussetzungen:
     pip3 install tinytuya
@@ -115,20 +116,26 @@ def listen(d, minutes: float):
     print(f"\n=== Listen-Modus: {minutes:g} Min auf Push-Updates lauschen (Strg+C beendet) ===")
     d.set_socketPersistent(True)
     seen = {}
+    last_ts = {}
     deadline = time.time() + minutes * 60
     try:
         while time.time() < deadline:
             data = d.receive()
+            now = time.time()
             if isinstance(data, dict) and "dps" in data:
+                ts = time.strftime("%H:%M:%S")
                 for k, v in data["dps"].items():
                     first = k not in seen
+                    delta = "" if first else f"  (+{now - last_ts[k]:.0f}s)"
+                    last_ts[k] = now
                     seen[k] = v
-                    print(f"  DP {k:>4}: {v!r}{' <- NEU' if first else ''}")
+                    flag = " <- NEU" if first else ""
+                    print(f"  [{ts}] DP {k:>4}: {v!r}{flag}{delta}")
                     if isinstance(v, str) and len(v) >= 8:
                         decoded = try_decode_b64(v)
                         if decoded and len(decoded) > 2:
                             pretty = {kk: vv for kk, vv in decoded.items() if kk != "bytes"}
-                            print(f"        ({decoded['len']} Bytes) "
+                            print(f"             ({decoded['len']} Bytes) "
                                   + json.dumps(pretty, ensure_ascii=False))
             d.heartbeat()
     except KeyboardInterrupt:
@@ -147,6 +154,22 @@ def _ask(label: str, default: str = "") -> str:
     return val or default
 
 
+class _Tee:
+    """Schreibt Ausgaben gleichzeitig aufs Terminal und in eine Logdatei."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+            s.flush()
+
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
+
 def main():
     # Werte aus Umgebungsvariablen verwenden, fehlende bei Ausfuehrung abfragen.
     device_id = DEVICE_ID or _ask("Device ID")
@@ -156,6 +179,12 @@ def main():
 
     if not device_id or not local_key or not ip:
         sys.exit("Abbruch: Device ID, Local Key und Geraete-IP sind erforderlich.")
+
+    os.makedirs("logs", exist_ok=True)
+    logpath = os.path.join("logs", time.strftime("%Y-%m-%d") + ".log")
+    logfh = open(logpath, "a", encoding="utf-8")
+    sys.stdout = _Tee(sys.__stdout__, logfh)
+    print(f"\n########## Lauf {time.strftime('%Y-%m-%d %H:%M:%S')}  ->  {logpath} ##########")
 
     d = tinytuya.Device(device_id, ip, local_key)
     d.set_version(version)
@@ -200,6 +229,10 @@ def main():
     minutes = float(_ask("\nListen-Modus starten? Minuten (0 = ueberspringen)", "10"))
     if minutes > 0:
         listen(d, minutes)
+
+    print(f"\nLog gespeichert: {logpath}")
+    sys.stdout = sys.__stdout__
+    logfh.close()
 
 
 if __name__ == "__main__":
