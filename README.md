@@ -80,7 +80,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 > ⚠️ Hinweis: Die Base64-DPs sind lokal **„push-only"** — sie erscheinen **nicht** in `tinytuya status()`, **nicht** über `detect_available_dps()` und **nicht** im Cloud-Standard-Status. Das Gerät pusht sie nur asynchron (~alle 10 min) bzw. an die Cloud (Device-Logs). localtuya/tuya-local fangen sie über ihre **persistente Verbindung** ab; ein Einzel-Abruf reicht nicht.
 >
-> Per Listen-Modus (`scripts/dump_dps.py`) identifiziert: **DP 3 = `battery_parameters`**, **DP 33 = `dc_message`** (Push ~alle 10 min). `pv_canshu`, `放电模式` und `逆変器類型` pushten im Nacht-Test nicht — `pv_canshu` vermutlich nur tagsüber, Schedule/WR-Typ nur bei Änderung.
+> Per Listen-Modus (`scripts/dump_dps.py`) identifiziert: **DP 3 = `battery_parameters`**, **DP 33 = `dc_message`** (Push ~alle 10 min), **DP 106 = `放电模式`** (Push bei Schedule-Änderung). Offen: `pv_canshu` (vermutlich nur tagsüber) und `逆変器類型` (nur bei WR-Setting-Änderung).
 
 #### `dc_message` (DP 33) – DC Ausgang (AUS1 + AUS2) ✅
 
@@ -165,9 +165,7 @@ byte[4:6]     = Batterieleistung (W)   ← ×1 (KEIN Teiler!)
 
 ---
 
-### Base64 DPs – plausibel, noch nicht 100% bestätigt ⚠️
-
-#### `放电模式` – Entlademodus Zeitfenster
+#### `放电模式` (DP 106) – Entlademodus Zeitfenster ✅
 
 **Format:** 36 Bytes = 1B Header + 5× 7B Slots
 
@@ -193,7 +191,9 @@ Pro Slot (7 Bytes, Offset = 1 + slot_index * 7):
 | 4 | 22 | ❌ | 00:00 | 23:59 | 80W |
 | 5 | 29 | ❌ | 00:00 | 23:59 | 80W |
 
-> Slot 1 (20:30–23:59, 320W) indirekt bestätigt: am 27.05.2026 20:49–21:09 `dc_message` flag 3 + 320W WR-Ausgang während dieses Fensters.
+> Slot 1 (20:30–23:59) indirekt bestätigt: am 27.05.2026 20:49–21:09 `dc_message` flag 3 + 320W WR-Ausgang während dieses Fensters.
+>
+> **Direkt bestätigt (27.05.2026):** DP 106 pushte nach einer App-Änderung den geänderten Slot-1-Wert (Leistung 320→340W) korrekt dekodiert → Format **und** DP-ID bestätigt.
 
 ---
 
@@ -215,7 +215,7 @@ Dekodierte uint16-BE-Werte: **1004, 360, 30, 600**. Hypothese: WR-Limits (30W mi
 | 107 | `放电深度` | Integer | Entladetiefe (DoD) | 1–100 % |
 | 111 | `主动更新数据` | Boolean | Daten-Refresh auslösen (mbeb: ggf. WR an/aus) | `true` |
 | 115 | `微逆功率` | Integer | WR-Leistungslimit (Sollwert) | W (0–600W) |
-| — | `放电模式` | Base64 | Entladezeitfenster (5 Slots) | siehe Struktur oben |
+| 106 | `放电模式` | Base64 | Entladezeitfenster (5 Slots) | siehe Struktur oben |
 
 ---
 
@@ -540,8 +540,8 @@ return msg;
 - [x] **DP 37** – via lokalem DP-Dump als **Solarerzeugung gesamt** identifiziert (1369 = 13.69 kWh) ✓
 - [x] **DP 113** – mbeb-Hypothese „WR-Ausgangsleistung" widerlegt (0 trotz aktiver Entladung); bleibt unklar
 - [ ] **DP 111** – mbeb-Hypothese „WR aktiv/inaktiv" gegen beobachtetes Refresh-Verhalten abgrenzen
-- [x] **Base64-DP-IDs** via Listen-Modus: DP 3 = `battery_parameters`, DP 33 = `dc_message` ✓
-- [ ] **Restliche Base64-DP-IDs** (`pv_canshu` / `放电模式` / `逆変器類型`) — pushten nachts nicht; tagsüber bzw. bei Schedule-Änderung mitschneiden
+- [x] **Base64-DP-IDs** via Listen-Modus: DP 3 = `battery_parameters`, DP 33 = `dc_message`, DP 106 = `放电模式` ✓
+- [ ] **Restliche Base64-DP-IDs** (`pv_canshu` tagsüber, `逆変器類型` bei WR-Setting-Änderung) mitschneiden
 - [ ] `dc_message` byte[2] bei Charge-Status klären
 
 ### Optional / Erweitert
