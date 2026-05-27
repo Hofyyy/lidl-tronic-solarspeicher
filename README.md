@@ -4,7 +4,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 > ⚠️ Community-Reverse-Engineering. Nicht von Lidl, Marstek oder Tuya autorisiert. Keine Garantie auf Korrektheit. Nutzung auf eigenes Risiko — Schreib-DPs können das Gerät unerwartet beeinflussen.
 
-**Status:** Numerische DPs überwiegend verifiziert, Base64-Dekodierung der wichtigsten DPs durch Messreihen bestätigt. Einzelne DPs (37, 113, `逆変器類型`) noch offen — siehe Abschnitt „Ungeklärte DPs". Korrekturen und Beiträge via Issue oder PR willkommen.
+**Status:** Numerische DPs überwiegend verifiziert (DP 37 als Solarerzeugung via lokalem tinytuya-Dump bestätigt), Base64-Dekodierung der wichtigsten DPs durch Messreihen bestätigt. Noch offen: DP 113 (immer 0, unklar) und `逆変器類型`. Korrekturen und Beiträge via Issue oder PR willkommen.
 
 ---
 
@@ -48,11 +48,13 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 | **2** | 21504 | Restzeit | min | ×1 | 21504 = 358h 24min, App bestätigt |
 | **4** | 0 | Fehler | — | ×1 | 0 = kein Fehler, Tuya Standard |
 | **10** | 32 | Batterietemperatur | °C | ×1 | App zeigt 32°C, DP-Name temp_current |
+| **37** | 1369 | Solarerzeugung gesamt (Lifetime, „Reverse Energy Total") | kWh | ÷100 | 1369÷100=13.69 kWh = App „Solarenergie/Stromerzeugung" + lokaler DP-Dump ✓ |
 | **102** | 750 | Gesamtladung Lifetime | kWh | ÷100 | 750÷100=7.50 kWh, App: 7.5 kWh ✓ |
 | **103** | 683 | Gesamtentladung Lifetime | kWh | ÷100 | 683÷100=6.83 kWh, App: 6.83 kWh ✓ |
+| **104** | 1171 | Gesamtausgang/Verbrauch (Lifetime, „Electric Total") | kWh | ÷100 | 1171÷100=11.71 kWh = App „Ausgangsleistung/Stromverbrauch" + lokaler DP-Dump ✓ |
 | **105** | charge_first | Lademodus | Enum | — | Toggle in App → Log zeigte charge_discharge ✓ |
 | **107** | 80 | Entladetiefe (DoD) | % | ×1 | Device Log = 80%, App bestätigt ✓ |
-| **109** | standby | Ladestatus | Enum | — | Charge + Standby im Log beobachtet ✓ |
+| **109** | discharge | Ladestatus | Enum | — | standby / charge / discharge im Log beobachtet ✓ |
 | **111** | True | Daten-Refresh Befehl (mbeb: evtl. WR aktiv/inaktiv) | Bool | — | App Client sendet on → Device antwortet ✓ |
 | **115** | 600 | WR-Leistungslimit (Sollwert, max 600W; ≠ Momentan-Ausgang) | W | ×1 | Log konstant 600 bei Live-Ausgang 320W → Limit, nicht Istwert ✓ |
 
@@ -62,7 +64,6 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 | DP ID | Wert | Beschreibung | Einheit | Skalierung | Was noch fehlt |
 |---|---|---|---|---|---|
-| **104** | 684 | Gesamtausgang Lifetime | kWh | ÷100 | App zeigte 6.66 kWh zu anderem Timestamp – zeitgleichen Vergleich noch ausstehend |
 | **108** | 80 | Mindestausgangsleistung (WR-Abschaltgrenze) | W | ×1 | Keine Logs vorhanden, logisch aus WR-Verhalten abgeleitet – Änderung in App noch nicht getestet |
 
 ---
@@ -71,12 +72,13 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 | DP ID | Wert | Hypothese | Was zu tun |
 |---|---|---|---|
-| **37** | 907 | Tages-PV-Ertrag (9.07 kWh)? **oder** Batterie-Lade-/Entladeleistung (W) – mbeb (Akkudoktor-Forum) deutet DP 37 als Batterieleistung | Live prüfen: zeitgleich mit App-Batterieleistung **und** PV-Tagesertrag vergleichen; Tagesreset → PV-Ertrag |
-| **113** | 0 | **Aktuelle WR-Ausgangsleistung (W)** – mbeb (Akkudoktor-Forum): 0 wenn WR nicht einspeist; deckt sich mit Messung bei Charge/WR aus | Bei aktiver WR-Einspeisung (Zeitfenster-Slot) prüfen ob Wert >0 wird |
+| **113** | 0 | Unklar – auch bei aktiver Entladung (DP 109 = discharge) weiter 0. mbeb-Hypothese „WR-Ausgangsleistung" damit **widerlegt** (wäre ~320W). Echte Ausgangsleistung steckt in `dc_message` | niedrige Priorität |
 
 ---
 
 ### Base64 DPs – bestätigt ✅
+
+> ⚠️ Hinweis: Die Base64-DPs erscheinen **nicht** im normalen Status-Abruf (weder lokal via `tinytuya status()` noch im Cloud-Standard-Status) — sie werden nur als Log-Events gemeldet. Für localtuya/tuya-local müssen ihre DP-IDs ggf. via `detect_available_dps()` ermittelt und explizit angefragt werden.
 
 #### `dc_message` – DC Ausgang (AUS1 + AUS2) ✅
 
@@ -219,9 +221,8 @@ Dekodierte uint16-BE-Werte: **1004, 360, 30, 600**. Hypothese: WR-Limits (30W mi
 
 | DP ID | Wert | Bemerkung |
 |---|---|---|
-| 37 | 907 | Evtl. heutiger PV-Ertrag (9.07 kWh?) **oder** Batterie-Lade-/Entladeleistung (mbeb) – noch zu verifizieren |
 | 108 | 80 | `电池启动阈值` – Mindestausgangsleistung in W, unter diesem Wert schaltet WR ab |
-| 113 | 0 | Vermutlich aktuelle WR-Ausgangsleistung (mbeb) – 0 bei nicht einspeisendem WR |
+| 113 | 0 | Unklar – 0 auch bei aktiver Entladung; mbeb-Hypothese „WR-Leistung" widerlegt |
 | dc_message byte[2] | 1–2 bei Charge | Bedeutung bei Ladestatus unklar |
 
 ---
@@ -534,9 +535,10 @@ return msg;
 - [ ] `放电模式` → Zeitfenster lesen und schreiben
 
 ### Ungeklärtes verifizieren
-- [ ] **DP 37** – Tagesreset prüfen (→ Tages-PV-Ertrag) **vs.** zeitgleicher Vergleich mit App-Batterieleistung (mbeb-Hypothese: Batterie-Lade-/Entladeleistung)
-- [ ] **DP 113** – mbeb-Hypothese „aktuelle WR-Ausgangsleistung" prüfen: bei aktiver WR-Einspeisung (Zeitfenster-Slot) sollte Wert >0 werden
+- [x] **DP 37** – via lokalem DP-Dump als **Solarerzeugung gesamt** identifiziert (1369 = 13.69 kWh) ✓
+- [x] **DP 113** – mbeb-Hypothese „WR-Ausgangsleistung" widerlegt (0 trotz aktiver Entladung); bleibt unklar
 - [ ] **DP 111** – mbeb-Hypothese „WR aktiv/inaktiv" gegen beobachtetes Refresh-Verhalten abgrenzen
+- [ ] **Base64-DP-Nummern** via `tinytuya detect_available_dps()` ermitteln (fehlen im normalen Status)
 - [ ] `dc_message` byte[2] bei Charge-Status klären
 
 ### Optional / Erweitert
