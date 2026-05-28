@@ -1,0 +1,57 @@
+# Lidl Tronic Solarstromspeicher – abgeleitete Template-Sensoren
+#
+# Einbinden in configuration.yaml:
+#   template: !include lidl_tronic_template_sensoren.yaml
+#
+# Gerätename anpassen: nur "device" unter variables: ändern.
+# Der Wert entspricht dem Entity-Präfix, den tuya-local vergibt
+# (Gerätenamen in Kleinbuchstaben, Leerzeichen → Unterstrich).
+
+- variables:
+    device: "lidl_tronic_solarstromspeicher"
+
+  sensor:
+
+    # Solarleistung netto = DC OUT1 + DC OUT2 (nur bei charge oder standby, sonst 0)
+    # Im discharge-Modus speist das Gerät ein – OUT1/OUT2 sind dann
+    # keine Solar-, sondern Entladeleistung.
+    - name: "Solarleistung netto"
+      # unique_id kann die device-Variable NICHT nutzen (kein Templating).
+      # Daher fester, HA-weit eindeutiger Slug – bei Mehrfachnutzung anpassen.
+      unique_id: "tronic_solarleistung_netto"
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set status = states('sensor.' ~ device ~ '_lade_entladestatus') %}
+        {% if status in ['charge', 'standby'] %}
+          {{ states('sensor.' ~ device ~ '_dc_out1_leistung') | float(0)
+           + states('sensor.' ~ device ~ '_dc_out2_leistung') | float(0) }}
+        {% else %}
+          0
+        {% endif %}
+      availability: >
+        {{ states('sensor.' ~ device ~ '_lade_entladestatus') not in ['unknown', 'unavailable'] }}
+
+    # Ladeleistung vorzeichenbehaftet:
+    #   discharge → positiv  (Batterie gibt Energie ab)
+    #   charge    → negativ  (Batterie nimmt Energie auf)
+    #   standby   → 0
+    - name: "Ladeleistung netto"
+      unique_id: "tronic_ladeleistung_netto"
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set status = states('sensor.' ~ device ~ '_lade_entladestatus') %}
+        {% set p = states('sensor.' ~ device ~ '_ladeleistung') | float(0) %}
+        {% if status == 'discharge' %}
+          {{ p }}
+        {% elif status == 'charge' %}
+          {{ p * -1 }}
+        {% else %}
+          0
+        {% endif %}
+      availability: >
+        {{ states('sensor.' ~ device ~ '_lade_entladestatus') not in ['unknown', 'unavailable']
+           and states('sensor.' ~ device ~ '_ladeleistung') not in ['unknown', 'unavailable'] }}
