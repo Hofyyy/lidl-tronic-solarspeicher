@@ -4,7 +4,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 > ⚠️ Community-Reverse-Engineering. Nicht von Lidl, Marstek oder Tuya autorisiert. Keine Garantie auf Korrektheit. Nutzung auf eigenes Risiko — Schreib-DPs können das Gerät unerwartet beeinflussen.
 
-**Status:** Numerische DPs überwiegend verifiziert (DP 37 als Solarerzeugung via lokalem tinytuya-Dump bestätigt), Base64-Dekodierung der wichtigsten DPs durch Messreihen bestätigt. Noch offen: DP 113 (immer 0, unklar) und die numerische ID von `pv_canshu`. Korrekturen und Beiträge via Issue oder PR willkommen.
+**Status:** DP-Mapping nahezu vollständig — offizielle Tuya-Cloud-Code-Namen via ge38kun ([tuya-local #5164](https://github.com/make-all/tuya-local/issues/5164)) übernommen und überwiegend empirisch verifiziert. Alle 5 Base64-DPs dekodiert. tuya-local empfängt die push-only Base64-DPs (bestätigt). Offen: empirische Verifikation einzelner ⓘ-markierter Codes (siehe Code-Map unten). Korrekturen und Beiträge via Issue oder PR willkommen.
 
 ---
 
@@ -41,6 +41,44 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 ## DP Mapping – Vollständige Übersicht
 
+### Code-Map (Tuya-Cloud-Namen) – kanonische Referenz
+
+Die folgenden Codes stammen direkt aus der Tuya-Cloud-Definition (`bxsdy`), beigesteuert von **ge38kun** ([tuya-local Issue #5164](https://github.com/make-all/tuya-local/issues/5164)). Verifikationsgrad pro Zeile:
+
+- ✅ = von uns empirisch gemessen + verifiziert
+- ⚠️ = plausibel, noch nicht voll bestätigt
+- ⓘ = offizieller Tuya-Code-Name (per ge38kun), Verhalten/Struktur von uns noch nicht empirisch verifiziert
+
+| DP | Tuya-Code | Bedeutung | Einheit / Skalierung | Verifikation |
+|---|---|---|---|---|
+| 1 | `battery_percentage` | Ladestand | % ×1 | ✅ |
+| 2 | `remain_time` | Restzeit | min ×1 | ✅ |
+| 3 | `battery_parameters` | Batterie V/A/W (Base64, 6 B) | – | ✅ |
+| 4 | `fault` | Fehler (Bitfield) | – | ✅ |
+| 10 | `temp_current` | Batterietemperatur | °C ×1 | ✅ |
+| 24 | `temp_set_enum` | Temperatur-Einheit | Enum `c`/`f` | ⓘ (Spec-gestützt) |
+| 33 | `dc_message` | DC-Ausgang AUS1/AUS2 (Base64, 13 B) | – | ✅ |
+| 37 | `reverse_energy_total` | Solarerzeugung gesamt (Lifetime) | kWh ÷100 | ✅ |
+| 101 | `pv_dc_data` | PV-Eingang (Base64, 13 B) – = `pv_canshu` / PV参数 | – | ⓘ |
+| 102 | `batt_char_total` | Gesamtladung (Lifetime) | kWh ÷100 | ✅ |
+| 103 | `batt_dischar_total` | Gesamtentladung (Lifetime) | kWh ÷100 | ✅ |
+| 104 | `electric_total` | Gesamtausgang/Verbrauch (Lifetime) | kWh ÷100 | ✅ |
+| 105 | `charge_mode` | Lademodus (Enum) | `charge_first` / `charge_discharge` | ✅ |
+| 106 | `discharge_mode` | Entlade-Zeitfenster (Base64, 36 B) | – | ✅ |
+| 107 | `discharge_limit` | Entladetiefe DoD | % ×1 | ✅ |
+| 108 | `batt_on_threshold` | WR-Abschaltgrenze | W ×1 | ⚠️ |
+| 109 | `charge_flag` | Status | `standby` / `charge` / `discharge` | ✅ |
+| 110 | `clear_elec` | Zähler zurücksetzen (Befehl) | – | ⓘ ⚠️ **NICHT testen** – würde Lifetime-Zähler löschen |
+| 111 | `force_reflesh` | Daten-Refresh (Bool) | – | ✅ |
+| 112 | `app_heart` | App-Heartbeat | – | ⓘ |
+| 113 | `pack_number` | Batterie-Pack-Nummer | – | ⓘ (konstant 0 beobachtet) |
+| 114 | `invt_id` | WR-Typ/Modell (Base64, 8 B) | – | ✅ |
+| 115 | `invt_power` | WR-Leistungslimit | W ×1 (0–600) | ✅ |
+
+Byte-Strukturen der Base64-DPs (3, 33, 101, 106, 114) sind in den Abschnitten weiter unten dokumentiert.
+
+---
+
 ### Numerische DPs – bestätigt ✅
 
 | DP ID | Wert | Beschreibung | Einheit | Skalierung | Validierung |
@@ -56,7 +94,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 | **105** | charge_first | Lademodus | Enum | — | Toggle in App → Log zeigte charge_discharge ✓ |
 | **107** | 80 | Entladetiefe (DoD) | % | ×1 | Device Log = 80%, App bestätigt ✓ |
 | **109** | discharge | Ladestatus | Enum | — | standby / charge / discharge im Log beobachtet ✓ |
-| **111** | True | Daten-Refresh Befehl (mbeb: evtl. WR aktiv/inaktiv) | Bool | — | App Client sendet on → Device antwortet ✓ |
+| **111** | True | Daten-Refresh Befehl (`force_reflesh`) | Bool | — | App Client sendet on → Device antwortet ✓; mbeb-Hypothese „WR on/off" widerlegt durch Tuya-Code-Name |
 | **115** | 600 | WR-Leistungslimit (Sollwert, max 600W; ≠ Momentan-Ausgang) | W | ×1 | Log konstant 600 bei Live-Ausgang 320W → Limit, nicht Istwert ✓ |
 
 ---
@@ -73,7 +111,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 | DP ID | Wert | Hypothese | Was zu tun |
 |---|---|---|---|
-| **113** | 0 | Unklar – auch bei aktiver Entladung (DP 109 = discharge) weiter 0. mbeb-Hypothese „WR-Ausgangsleistung" damit **widerlegt** (wäre ~320W). Echte Ausgangsleistung steckt in `dc_message` | niedrige Priorität |
+| **113** | 0 | `pack_number` (Batterie-Pack-Nummer, per ge38kun/Tuya-Cloud) — erklärt die konstante 0. mbeb-Hypothese „WR-Ausgangsleistung" empirisch widerlegt; echte Ausgangsleistung steckt in `dc_message` | niedrige Priorität |
 
 ---
 
@@ -125,7 +163,7 @@ byte[11:13]    = DC2 Leistung (W)   → AUS2
 
 ---
 
-#### `pv_canshu` (PV参数) – Solar PV Eingang ✅
+#### `pv_canshu` / `pv_dc_data` (DP 101) – Solar PV Eingang ✅
 
 **Format:** 13 Bytes
 
@@ -229,7 +267,7 @@ byte[6:8] = Maximalleistung (W) = Modell-Limit (= W-Zahl im Modellnamen)
 |---|---|---|---|---|
 | 105 | `充电模式` | Enum | Lademodus | `charge_first` / `charge_discharge` |
 | 107 | `放电深度` | Integer | Entladetiefe (DoD) | 1–100 % |
-| 111 | `主动更新数据` | Boolean | Daten-Refresh auslösen (mbeb: ggf. WR an/aus) | `true` |
+| 111 | `force_reflesh` (`主动更新数据`) | Boolean | Daten-Refresh auslösen | `true` |
 | 115 | `微逆功率` | Integer | WR-Leistungslimit (Sollwert) | W (0–600W) |
 | 106 | `放电模式` | Base64 | Entladezeitfenster (5 Slots) | siehe Struktur oben |
 
@@ -240,7 +278,7 @@ byte[6:8] = Maximalleistung (W) = Modell-Limit (= W-Zahl im Modellnamen)
 | DP ID | Wert | Bemerkung |
 |---|---|---|
 | 108 | 80 | `电池启动阈值` – Mindestausgangsleistung in W, unter diesem Wert schaltet WR ab |
-| 113 | 0 | Unklar – 0 auch bei aktiver Entladung; mbeb-Hypothese „WR-Leistung" widerlegt |
+| 113 | 0 | `pack_number` (per ge38kun) – Batterie-Pack-Nummer, erklärt konstante 0 |
 | dc_message byte[2] | 1–2 bei Charge | Bedeutung bei Ladestatus unklar |
 
 ---
@@ -347,7 +385,7 @@ def encode_discharge_schedule(slots: list, header: int = 0) -> str:
 ### Custom Device YAML
 
 Die vollständige Gerätedefinition liegt als separate Datei im Repo:
-**[`devices/solarspeicher_bxsdy.yaml`](devices/solarspeicher_bxsdy.yaml)** (23 DPs, alle aus der Tuya-Cloud-Spec via ge38kun übernommen).
+**[`devices/solarspeicher_bxsdy.yaml`](devices/solarspeicher_bxsdy.yaml)** (23 DPs, alle aus der Code-Map abgedeckt).
 
 **Installation:**
 1. Datei nach `/config/custom_components/tuya_local/devices/` kopieren
