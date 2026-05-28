@@ -157,7 +157,7 @@ secondary_entities:
     name: PV-Eingang (raw)
     category: diagnostic
     dps:
-      - id: 101                            # pv_dc_data (= pv_canshu / PV参数)
+      - id: 101                            # pv_dc_data (= pv_canshu / PV参数) -- DP-ID via Listen-Modus bestaetigt 28.05.2026
         type: string
         name: sensor
   - entity: sensor

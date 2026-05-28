@@ -4,7 +4,7 @@ Reverse-engineertes Tuya-DataPoint-Mapping für den **Lidl TRONIC Solarspeicher 
 
 > ⚠️ Community-Reverse-Engineering. Nicht von Lidl, Marstek oder Tuya autorisiert. Keine Garantie auf Korrektheit. Nutzung auf eigenes Risiko — Schreib-DPs können das Gerät unerwartet beeinflussen.
 
-**Status:** DP-Mapping nahezu vollständig — offizielle Tuya-Cloud-Code-Namen via ge38kun ([tuya-local #5164](https://github.com/make-all/tuya-local/issues/5164)) übernommen und überwiegend empirisch verifiziert. Alle 5 Base64-DPs dekodiert. tuya-local empfängt die push-only Base64-DPs (bestätigt). Offen: empirische Verifikation einzelner ⓘ-markierter Codes (siehe Code-Map unten). Korrekturen und Beiträge via Issue oder PR willkommen.
+**Status:** DP-Mapping vollständig — offizielle Tuya-Cloud-Code-Namen via ge38kun ([tuya-local #5164](https://github.com/make-all/tuya-local/issues/5164)) übernommen und überwiegend empirisch verifiziert. Alle 5 Base64-DPs dekodiert und via Listen-Modus identifiziert (DP 101 = `pv_dc_data` zuletzt bestätigt 28.05.2026). tuya-local empfängt die push-only Base64-DPs (bestätigt). Offen: empirische Verifikation einzelner ⓘ-markierter Codes (siehe Code-Map unten). Korrekturen und Beiträge via Issue oder PR willkommen.
 
 ---
 
@@ -59,7 +59,7 @@ Die folgenden Codes stammen direkt aus der Tuya-Cloud-Definition (`bxsdy`), beig
 | 24 | `temp_set_enum` | Temperatur-Einheit | Enum `c`/`f` | ⓘ (Spec-gestützt) |
 | 33 | `dc_message` | DC-Ausgang AUS1/AUS2 (Base64, 13 B) | – | ✅ |
 | 37 | `reverse_energy_total` | Solarerzeugung gesamt (Lifetime) | kWh ÷100 | ✅ |
-| 101 | `pv_dc_data` | PV-Eingang (Base64, 13 B) – = `pv_canshu` / PV参数 | – | ⓘ |
+| 101 | `pv_dc_data` | PV-Eingang (Base64, 13 B) – = `pv_canshu` / PV参数 | – | ✅ |
 | 102 | `batt_char_total` | Gesamtladung (Lifetime) | kWh ÷100 | ✅ |
 | 103 | `batt_dischar_total` | Gesamtentladung (Lifetime) | kWh ÷100 | ✅ |
 | 104 | `electric_total` | Gesamtausgang/Verbrauch (Lifetime) | kWh ÷100 | ✅ |
@@ -119,7 +119,7 @@ Byte-Strukturen der Base64-DPs (3, 33, 101, 106, 114) sind in den Abschnitten we
 
 > ⚠️ Hinweis: Die Base64-DPs sind lokal **„push-only"** — sie erscheinen **nicht** in `tinytuya status()`, **nicht** über `detect_available_dps()` und **nicht** im Cloud-Standard-Status. Das Gerät pusht sie nur asynchron (~alle 10 min) bzw. an die Cloud (Device-Logs). **Bestätigt (27.05.2026):** tuya-local empfängt sie über seine **persistente Verbindung** — ein Einzel-Abruf reicht nicht.
 >
-> Per Listen-Modus (`scripts/dump_dps.py`) identifiziert: **DP 3 = `battery_parameters`**, **DP 33 = `dc_message`** (Push ~alle 10 min), **DP 106 = `放电模式`** (Push bei Schedule-Änderung), **DP 114 = `逆変器類型`** (Push bei WR-Typ-Änderung). Offen nur noch: `pv_canshu` (vermutlich nur tagsüber).
+> Per Listen-Modus (`scripts/dump_dps.py`) identifiziert: **DP 3 = `battery_parameters`**, **DP 33 = `dc_message`** (Push ~alle 10 min), **DP 101 = `pv_dc_data`** (Push ~alle 10 min, auch bei minimalem Morgen-PV — 28.05.2026 06:15 Uhr bereits sichtbar), **DP 106 = `放电模式`** (Push bei Schedule-Änderung), **DP 114 = `逆変器類型`** (Push bei WR-Typ-Änderung). Alle Base64-DP-IDs nun vollständig empirisch bestätigt.
 
 #### `dc_message` (DP 33) – DC Ausgang (AUS1 + AUS2) ✅
 
@@ -180,8 +180,14 @@ byte[11:13]    = PV2 Leistung (W)
 **Verifikation:**
 - `AAEWAEgAyQESAtwAyQ==` → PV1: 27.8V / 7.2A / **201W** ✅ | PV2: 27.4V / 7.32A / **201W** ✅
 - Messreihe 27.05.2026 (Sonnenuntergang, flag 3): PV gesamt 62 → 11 → 8 → 4 W, V×A bei allen Samples konsistent ✅
+- **DP-ID via Listen-Modus bestätigt (28.05.2026, 06:15 Uhr):** Frühmorgens bei minimalem PV bereits gepusht:
 
-> Hinweis: Skalierungsunterschied PV1 Strom ÷10, PV2 Strom ÷100. byte[0] im Entladebetrieb = 3.
+| Zeit | Raw | PV1-V | PV1-A | PV1-W | PV2-V | PV2-A | PV2-W | V×A≈W |
+|---|---|---|---|---|---|---|---|---|
+| 06:15 | `AwFAAAIABwEbABgABg==` | 32.0V | 0.20A | 7W | 28.3V | 0.24A | 6W | 6.4≈7 / 6.8≈6 ✅ |
+| 06:25 | `AwEaAAIACAFGABsACA==` | 28.2V | 0.20A | 8W | 32.6V | 0.27A | 8W | 5.6≈8 / 8.8≈8 ✅ |
+
+> Hinweis: Skalierungsunterschied PV1 Strom ÷10, PV2 Strom ÷100. byte[0] im Zeitfenster-Entladebetrieb = 3 (gleicher Flag-Mechanismus wie `dc_message`). DP-Annahme „nur tagsüber" widerlegt — Gerät pusht bereits ab Sonnenaufgang bei minimalem PV (13 W gesamt).
 
 ---
 
@@ -510,8 +516,7 @@ return msg;
 - [x] **DP 37** – via lokalem DP-Dump als **Solarerzeugung gesamt** identifiziert (1369 = 13.69 kWh) ✓
 - [x] **DP 113** – mbeb-Hypothese „WR-Ausgangsleistung" widerlegt (0 trotz aktiver Entladung); bleibt unklar
 - [ ] **DP 111** – mbeb-Hypothese „WR aktiv/inaktiv" gegen beobachtetes Refresh-Verhalten abgrenzen
-- [x] **Base64-DP-IDs** via Listen-Modus: DP 3 = `battery_parameters`, DP 33 = `dc_message`, DP 106 = `放电模式`, DP 114 = `逆変器類型` ✓
-- [ ] **`pv_canshu`-DP-ID** tagsüber (bei aktiver PV) mitschneiden — letzte offene Base64-ID
+- [x] **Base64-DP-IDs** via Listen-Modus: DP 3 = `battery_parameters`, DP 33 = `dc_message`, DP 101 = `pv_dc_data`, DP 106 = `放电模式`, DP 114 = `逆変器類型` ✓ — alle 5 Base64-DPs vollständig identifiziert
 - [ ] `dc_message` byte[2] bei Charge-Status klären
 
 ### Optional / Erweitert
