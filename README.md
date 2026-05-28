@@ -345,153 +345,18 @@ def encode_discharge_schedule(slots: list, header: int = 0) -> str:
 5. Protocol: `3.3` (lokal bestätigt)
 
 ### Custom Device YAML
-Pfad: `/config/custom_components/tuya_local/devices/solarspeicher_bxsdy.yaml`
 
-> Die Base64-DPs (3, 33, 106, 114) sind als **rohe String-Sensoren** (`category: diagnostic`) eingebunden — sie sind **push-only** und zeigen erst Werte, wenn das Gerät sie pusht (~alle 10 min bzw. bei Änderung). Dekodierung in HA via Template/AppDaemon (siehe nächster Abschnitt). `pv_canshu` fehlt noch, da DP-ID unbekannt (tagsüber ermitteln).
+Die vollständige Gerätedefinition liegt als separate Datei im Repo:
+**[`devices/solarspeicher_bxsdy.yaml`](devices/solarspeicher_bxsdy.yaml)** (23 DPs, alle aus der Tuya-Cloud-Spec via ge38kun übernommen).
 
-```yaml
-name: Solarspeicher bxsdy
-primary_entity:
-  entity: sensor
-  name: Batterie
-  dps:
-    - id: 1
-      type: integer
-      name: sensor
-      unit: "%"
-      class: battery
-    - id: 10
-      type: integer
-      name: current_temperature
-      unit: "°C"
-      class: temperature
-    - id: 2
-      type: integer
-      name: remain_time
-      unit: "min"
-    - id: 4
-      type: bitfield
-      name: fault
-    - id: 109
-      type: string
-      name: charge_status
+**Installation:**
+1. Datei nach `/config/custom_components/tuya_local/devices/` kopieren
+2. tuya-local Integration in HA neu starten (oder HA neu starten)
+3. Gerät via tuya-local Integration manuell hinzufügen (IP, Device ID, Local Key, Protokoll `3.3`)
 
-secondary_entities:
-  - entity: sensor
-    name: Energie
-    dps:
-      - id: 102
-        type: integer
-        name: total_energy_charged
-        unit: "kWh"
-        class: energy
-        mapping:
-          - scale: 0.01
-      - id: 103
-        type: integer
-        name: total_energy_discharged
-        unit: "kWh"
-        class: energy
-        mapping:
-          - scale: 0.01
-      - id: 104
-        type: integer
-        name: total_output_energy        # "Electric Total" (Ausgang/Verbrauch)
-        unit: "kWh"
-        class: energy
-        mapping:
-          - scale: 0.01
-      - id: 37
-        type: integer
-        name: total_solar_energy         # "Reverse Energy Total" (Solarerzeugung)
-        unit: "kWh"
-        class: energy
-        mapping:
-          - scale: 0.01
-
-  - entity: select
-    name: Lademodus
-    dps:
-      - id: 105
-        type: string
-        name: option
-        mapping:
-          - dps_val: charge_first
-            value: "Akku zuerst laden"
-          - dps_val: charge_discharge
-            value: "Laden und Entladen"
-
-  - entity: number
-    name: WR Leistungslimit
-    dps:
-      - id: 115
-        type: integer
-        name: value
-        unit: "W"
-        range:
-          min: 0
-          max: 600
-
-  - entity: number
-    name: Entladetiefe DoD
-    dps:
-      - id: 107
-        type: integer
-        name: value
-        unit: "%"
-        range:
-          min: 1
-          max: 100
-
-  - entity: button
-    name: Daten aktualisieren
-    dps:
-      - id: 111
-        type: boolean
-        name: button
-
-  - entity: number
-    name: WR Abschaltgrenze
-    dps:
-      - id: 108
-        type: integer
-        name: value
-        unit: "W"
-        range:
-          min: 0
-          max: 600
-
-  # --- Base64-DPs (push-only): rohe Strings, Dekodierung via Template/AppDaemon ---
-  # pv_canshu (PV参数) fehlt noch -- DP-ID tagsueber via Listen-Modus ermitteln
-  - entity: sensor
-    name: Batterie-Parameter (raw)
-    category: diagnostic
-    dps:
-      - id: 3
-        type: string
-        name: sensor
-  - entity: sensor
-    name: DC-Ausgang (raw)
-    category: diagnostic
-    dps:
-      - id: 33
-        type: string
-        name: sensor
-  - entity: sensor
-    name: Entlade-Zeitfenster (raw)
-    category: diagnostic
-    dps:
-      - id: 106
-        type: string
-        name: sensor
-  - entity: sensor
-    name: WR-Typ (raw)
-    category: diagnostic
-    dps:
-      - id: 114
-        type: string
-        name: sensor
-```
+> ⚠️ Die Base64-DPs (3, 33, 101, 106, 114) sind als rohe String-Sensoren (`category: diagnostic`) eingebunden — sie sind **push-only** und werden über die persistente tuya-local-Verbindung empfangen (bestätigt). Dekodierung in HA via Template/AppDaemon (siehe nächster Abschnitt).
+>
+> ⚠️ **DP 110 (`clear_elec`)** ist als Button `Lifetime-Zaehler zuruecksetzen (DESTRUKTIV)` enthalten — würde beim Drücken alle Lifetime-Energiezähler (DP 37/102/103/104) auf 0 setzen. Kein Undo. Nicht versehentlich auslösen (z. B. Voice Assistant, Dashboard).
 
 ---
 
