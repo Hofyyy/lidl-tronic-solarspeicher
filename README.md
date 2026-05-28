@@ -390,17 +390,12 @@ def encode_discharge_schedule(slots: list, header: int = 0) -> str:
 
 ### Custom Device YAML
 
-Die vollständige Gerätedefinition liegt als separate Datei im Repo:
-**[`devices/solarspeicher_bxsdy.yaml`](devices/solarspeicher_bxsdy.yaml)** (23 DPs, alle aus der Code-Map abgedeckt).
+Für die tuya-local Gerätedefinition empfehlen wir das YAML von **[Maztah/tronic-speicher-tuya-local](https://github.com/Maztah/tronic-speicher-tuya-local)** — es nutzt das neuere tuya-local-Schema mit nativer Base64-Dekodierung (Werte erscheinen direkt als Sensoren in HA, kein AppDaemon/Node-RED nötig).
 
 **Installation:**
-1. Datei nach `/config/custom_components/tuya_local/devices/` kopieren
+1. YAML aus [Maztah/tronic-speicher-tuya-local](https://github.com/Maztah/tronic-speicher-tuya-local) nach `/config/custom_components/tuya_local/devices/` kopieren
 2. tuya-local Integration in HA neu starten (oder HA neu starten)
 3. Gerät via tuya-local Integration manuell hinzufügen (IP, Device ID, Local Key, Protokoll `3.3`)
-
-> ⚠️ Die Base64-DPs (3, 33, 101, 106, 114) sind als rohe String-Sensoren (`category: diagnostic`) eingebunden — sie sind **push-only** und werden über die persistente tuya-local-Verbindung empfangen (bestätigt). Dekodierung in HA via Template/AppDaemon (siehe nächster Abschnitt).
->
-> ⚠️ **DP 110 (`clear_elec`)** ist als Button `Lifetime-Zaehler zuruecksetzen (DESTRUKTIV)` enthalten — würde beim Drücken alle Lifetime-Energiezähler (DP 37/102/103/104) auf 0 setzen. Kein Undo. Nicht versehentlich auslösen (z. B. Voice Assistant, Dashboard).
 
 ---
 
